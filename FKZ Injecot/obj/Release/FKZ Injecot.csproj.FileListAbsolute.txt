@@ -1,0 +1,11 @@
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\bin\Release\FKZ Injecot.exe.config
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\bin\Release\FKZ Injecot.exe
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\bin\Release\FKZ Injecot.pdb
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ Injecot.csproj.AssemblyReference.cache
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ Injecot.csproj.SuggestedBindingRedirects.cache
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ_Injecot.Form1.resources
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ_Injecot.Properties.Resources.resources
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ Injecot.csproj.GenerateResource.cache
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ Injecot.csproj.CoreCompileInputs.cache
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ Injecot.exe
+C:\Users\Oliver\source\repos\FKZ Injecot\FKZ Injecot\obj\Release\FKZ Injecot.pdb
