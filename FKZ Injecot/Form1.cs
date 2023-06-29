@@ -7,6 +7,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -30,8 +31,12 @@ namespace FKZ_Injecot
         private const int PROCESS_VM_WRITE = 0x0020;
         private const int PROCESS_VM_READ = 0x0010;
         private DiscordRpcClient rpcClient;
+        private StringBuilder logBuilder = new StringBuilder(); // StringBuilder for log messages
 
         // External function declarations
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool FreeLibrary(IntPtr hModule);
+
         [DllImport("kernel32.dll")]
         private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
 
@@ -59,29 +64,33 @@ namespace FKZ_Injecot
         public Form1()
         {
             InitializeComponent();
+
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
 
-            // Retrieve the list of running processes
+            logBuilder = new StringBuilder();
+
+            // Retrieve the updated list of running processes
             processes = new List<Process>(Process.GetProcesses());
 
             processes.Sort((x, y) => string.Compare(x.ProcessName, y.ProcessName));
 
-            // Display the list of running processes in the ListBox
+            // Display the updated list of running processes in the comboBox1 control
             foreach (var process in processes)
             {
                 comboBox1.Items.Add($"{process.ProcessName} (ID: {process.Id})");
             }
 
+
             dllFiles = new List<string>();
           
 
             // Allow dropping DLL files on the ListBox
-            listBox2.AllowDrop = true;
-            listBox2.DragEnter += dllListBox_DragEnter;
-            listBox2.DragDrop += dllListBox_DragDrop;
+            listBox1.AllowDrop = true;
+            listBox1.DragEnter += dllListBox_DragEnter;
+            listBox1.DragDrop += dllListBox_DragDrop;
             // Change Button Color
             button5.MouseEnter += (s, ev) => button5.BackColor = Color.Gray;
             button5.MouseLeave += (s, ev) => button5.BackColor = Color.Black;
@@ -95,27 +104,38 @@ namespace FKZ_Injecot
             rpcClient = new DiscordRpcClient("1123641805880164412");
             rpcClient.Logger = new ConsoleLogger() { Level = LogLevel.Warning };
             rpcClient.Initialize();
-           
+            LogMessage("Form loaded.");
+            LogMessage("Discord Presence Initialised.");
 
+        }
+
+        private void LogMessage(string message)
+        {
+            string logEntry = $"[{DateTime.Now.ToString("HH:mm")}] {message}";
+            Console.WriteLine(logEntry); // Print to console (optional)
+
+            // Append log message to the TextBox
+            logBuilder.AppendLine(logEntry);
+            richTextBox1.Text = logBuilder.ToString();
         }
 
         public void UpdateDiscordPresence(string state, string details)
         {
-            var presence = new RichPresence()
-            {
-                State = state,
-                //Details = details,
-                Timestamps = new Timestamps()
+                var presence = new RichPresence()
                 {
-                    Start = DateTime.UtcNow
-                },
-                Assets = new Assets()
-                {
-                    LargeImageKey = "discord_logo",
-                }
-            };
+                    State = state,
+                    //Details = details,
+                    Timestamps = new Timestamps()
+                    {
+                        Start = DateTime.UtcNow
+                    },
+                    Assets = new Assets()
+                    {
+                        LargeImageKey = "discord_logo",
+                    }
+                };
 
-            rpcClient.SetPresence(presence);
+                rpcClient.SetPresence(presence);
         }
         public void DisposeDiscordRPC()
         {
@@ -176,7 +196,7 @@ namespace FKZ_Injecot
 
                     string displayText = $"{fileName} | {fullPath} | ({architecture})";
 
-                    listBox2.Items.Add(displayText);
+                    listBox1.Items.Add(displayText);
                 }
             }
         }
@@ -190,6 +210,7 @@ namespace FKZ_Injecot
         {
             if (comboBox1.SelectedIndex != -1)
             {
+                LogMessage("Injection Started.");
                 if (comboBox1.SelectedItem is string selectedProcessString)
                 {
                     if (int.TryParse(selectedProcessString.Substring(selectedProcessString.LastIndexOf("(") + 4, selectedProcessString.Length - selectedProcessString.LastIndexOf("(") - 5), out int selectedProcessId))
@@ -200,25 +221,31 @@ namespace FKZ_Injecot
                         bool injectionSuccess = InjectDLL(selectedProcess, dllFiles);
                         if (injectionSuccess)
                         {
+                            LogMessage("Injected successfully.");                        
                             MessageBox.Show("DLLs injected successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            LogMessage("Injection Ended.");
                         }
                         else
                         {
+                            LogMessage("DLL injection failed.");
                             MessageBox.Show("DLL injection failed.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
                     else
                     {
+                        LogMessage("Failed to parse the process ID.");
                         MessageBox.Show("Failed to parse the process ID.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
                 else
                 {
+                    LogMessage("Failed to retrieve the selected process.");
                     MessageBox.Show("Failed to retrieve the selected process.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             else
             {
+                LogMessage("Please select a process.");
                 MessageBox.Show("Please select a process.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -228,6 +255,7 @@ namespace FKZ_Injecot
             IntPtr processHandle = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, false, process.Id);
             if (processHandle == IntPtr.Zero)
             {
+                LogMessage($"Failed to open process (ID: {process.Id})");
                 MessageBox.Show($"Failed to open process (ID: {process.Id})", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
@@ -236,16 +264,20 @@ namespace FKZ_Injecot
             IntPtr kernel32Module = GetModuleHandle("kernel32.dll");
             if (kernel32Module == IntPtr.Zero)
             {
+                LogMessage("Failed to get handle for kernel32.dll.");
                 MessageBox.Show("Failed to get handle for kernel32.dll", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 CloseHandle(processHandle);
+                LogMessage("ClosedHandle.");
                 return false;
             }
 
             IntPtr loadLibraryAddr = GetProcAddress(kernel32Module, "LoadLibraryA");
             if (loadLibraryAddr == IntPtr.Zero)
             {
+                LogMessage("Failed to get address of LoadLibraryA.");
                 MessageBox.Show("Failed to get address of LoadLibraryA", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 CloseHandle(processHandle);
+                LogMessage("ClosedHandle.");
                 return false;
             }
 
@@ -255,8 +287,10 @@ namespace FKZ_Injecot
                 IntPtr dllPathAddr = VirtualAllocEx(processHandle, IntPtr.Zero, (uint)dllFile.Length, 0x1000, 0x40);
                 if (dllPathAddr == IntPtr.Zero)
                 {
+                    LogMessage("Failed to allocate memory in the target process");
                     MessageBox.Show("Failed to allocate memory in the target process", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     CloseHandle(processHandle);
+                    LogMessage("ClosedHandle.");
                     return false;
                 }
 
@@ -265,8 +299,10 @@ namespace FKZ_Injecot
                 int bytesWritten;
                 if (!WriteProcessMemory(processHandle, dllPathAddr, dllPathBytes, (uint)dllPathBytes.Length, out bytesWritten))
                 {
+                    LogMessage("Failed to write the DLL path into the target process's memory.");
                     MessageBox.Show("Failed to write the DLL path into the target process's memory", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     CloseHandle(processHandle);
+                    LogMessage("ClosedHandle.");
                     return false;
                 }
 
@@ -274,8 +310,10 @@ namespace FKZ_Injecot
                 IntPtr threadHandle = CreateRemoteThread(processHandle, IntPtr.Zero, 0, loadLibraryAddr, dllPathAddr, 0, IntPtr.Zero);
                 if (threadHandle == IntPtr.Zero)
                 {
+                    LogMessage("Failed to create a remote thread in the target process.");
                     MessageBox.Show("Failed to create a remote thread in the target process", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     CloseHandle(processHandle);
+                    LogMessage("ClosedHandle.");
                     return false;
                 }
 
@@ -287,12 +325,13 @@ namespace FKZ_Injecot
 
             CloseHandle(processHandle);
 
+
             return true;
         }
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern int WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
-        private void listBox2_SelectedIndexChanged(object sender, EventArgs e)
+        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
 
         }
@@ -302,27 +341,6 @@ namespace FKZ_Injecot
 
         }
 
-        private void button2_Click(object sender, EventArgs e)
-        {
-            OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.Filter = "DLL Files|*.dll";
-            openFileDialog.Multiselect = true;
-
-            if (openFileDialog.ShowDialog() == DialogResult.OK)
-            {
-                foreach (string filePath in openFileDialog.FileNames)
-                {
-                    FileInfo fileInfo = new FileInfo(filePath);
-                    string fileName = fileInfo.Name;
-                    string fullPath = fileInfo.FullName;
-                    string architecture = GetDllArchitecture(filePath); // Custom method to get the architecture
-
-                    string displayText = $"{fileName} | {fullPath} | ({architecture})";
-
-                    listBox2.Items.Add(displayText);
-                }
-            }
-        }
 
         private string GetDllArchitecture(string filePath)
         {
@@ -375,6 +393,109 @@ namespace FKZ_Injecot
         private void label7_Click(object sender, EventArgs e)
         {
 
+        }
+
+        private void label5_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void richTextBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            listBox1.Items.Clear();
+        }
+
+        private void button2_Click_1(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "DLL Files|*.dll";
+            openFileDialog.Multiselect = true;
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                foreach (string filePath in openFileDialog.FileNames)
+                {
+                    FileInfo fileInfo = new FileInfo(filePath);
+                    string fileName = fileInfo.Name;
+                    string fullPath = fileInfo.FullName;
+                    string architecture = GetDllArchitecture(filePath); // Custom method to get the architecture
+
+                    string displayText = $"{fileName} | {fullPath} | ({architecture})";
+
+                    listBox1.Items.Add(displayText);
+                }
+            }
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            if (comboBox1.SelectedIndex != -1)
+            {
+                if (comboBox1.SelectedItem is string selectedProcessString)
+                {
+                    if (int.TryParse(selectedProcessString.Substring(selectedProcessString.LastIndexOf("(") + 4, selectedProcessString.Length - selectedProcessString.LastIndexOf("(") - 5), out int selectedProcessId))
+                    {
+                        Process selectedProcess = Process.GetProcessById(selectedProcessId);
+                        // Kill the process
+                        selectedProcess.Kill();
+
+                        // Optionally, you can wait for the process to exit and handle any cleanup or error scenarios
+                        selectedProcess.WaitForExit();
+
+                        // Process killed successfully
+                        LogMessage("Process killed successfully.");
+                        MessageBox.Show("Process killed successfully.");
+                    }
+                }
+            }
+            else
+            {
+                LogMessage("No process selected");
+                MessageBox.Show("No process selected.");
+            }
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            // Get the selected item from the combo box
+            int selectedIndex = listBox1.SelectedIndex;
+
+            // Unload the selected DLL
+            if (selectedIndex >= 0)
+            {
+                IntPtr hModule = (IntPtr)listBox1.Items[selectedIndex];
+
+                if (hModule != IntPtr.Zero)
+                {
+                    // Call the FreeLibrary function to unload the DLL
+                    if (FreeLibrary(hModule))
+                    {
+                        // Unloading successful
+                        MessageBox.Show("DLL unloaded successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        // Error occurred while unloading the DLL
+                        int errorCode = Marshal.GetLastWin32Error();
+                        MessageBox.Show("Error unloading DLL. Error code: " + errorCode, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                else
+                {
+                    // Invalid handle
+                    MessageBox.Show("Invalid DLL handle.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            else
+            {
+                // No DLL selected
+                MessageBox.Show("No DLL selected.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }
